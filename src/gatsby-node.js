@@ -23,25 +23,50 @@ export const onCreateWebpackConfig = (
  * Moves all js and css files into timestamp-named folder
  * @see {@link https://next.gatsbyjs.org/docs/node-apis/#onPostBuild}
  */
-export const onPostBuild = async ({ pathPrefix }, { additionalPaths = [] }) => {
+export const onPostBuild = async ({ pathPrefix }, { additionalFiles = [] }) => {
   const publicFolder = "./public";
   const assetFolder = path.join(publicFolder, `.${pathPrefix}`);
 
+  const copy = (fileOrFolder) => {
+    const currentPath = path.join(publicFolder, fileOrFolder);
+    const newPath = path.join(assetFolder, fileOrFolder);
+    try {
+      if (fs.existsSync(currentPath)) {
+        return fs.copy(currentPath, newPath);
+      }
+    } catch (err) {
+      console.error(err);
+      return Promise.resolve();
+    }
+  };
   const move = (fileOrFolder) => {
     const currentPath = path.join(publicFolder, fileOrFolder);
     const newPath = path.join(assetFolder, fileOrFolder);
-    return fs.move(currentPath, newPath);
+    try {
+      if (fs.existsSync(currentPath)) {
+        return fs.move(currentPath, newPath);
+      }
+    } catch (err) {
+      console.error(err);
+      return Promise.resolve();
+    }
   };
 
-  const filterFilesIn = (folder) =>
-    fs.readdirSync(folder).filter((file) => /.*\.(js|css)$/.test(file));
+  // Move css,js and webmanifest files
+  const files = fs.readdirSync(publicFolder);
+  await Promise.all(
+    files.map((file) => {
+      if (/.*\.(js|css|webmanifest)$/.test(file)) {
+        return move(file);
+      }
+    }),
+  );
 
-  const filesInPublicFolder = filterFilesIn(publicFolder);
-  const directories = ["static", "icons", "page-data"];
-  const thingsToMove = directories
-    .concat(filesInPublicFolder)
-    .concat(additionalPaths);
+  await Promise.all(additionalFiles.map((file) => move(file)));
 
-  // Move files and directories
-  await Promise.all(thingsToMove.map(move));
+  // Move statics data and icons
+  await Promise.all(["static", "icons"].map(move));
+
+  // Copy page data and sitemap
+  await Promise.all(["page-data", "sitemap.xml"].map(copy));
 };
